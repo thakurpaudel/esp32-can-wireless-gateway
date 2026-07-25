@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ESP32 CAN Gateway</title>
+  <style>
+    :root { color-scheme: dark; --bg:#07111f; --panel:#102033; --line:#25405e; --cyan:#35d5f4; --green:#68e0a0; --muted:#93a8bd; }
+    * { box-sizing:border-box }
+    body { margin:0; background:linear-gradient(145deg,#07111f,#0b1b2e); color:#eaf5ff; font:15px system-ui,sans-serif; min-height:100vh }
+    main { width:min(1120px,94vw); margin:32px auto }
+    header { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap }
+    h1 { margin:0; font-size:clamp(24px,5vw,40px) }
+    h1 span { color:var(--cyan) }
+    .status { padding:8px 13px; border:1px solid var(--line); border-radius:999px; color:var(--muted) }
+    .status.online { color:var(--green); border-color:#287b56 }
+    .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:24px 0 }
+    .card { padding:18px; background:#102033cc; border:1px solid var(--line); border-radius:14px }
+    .label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.1em }
+    .value { display:block; margin-top:8px; font:bold 27px ui-monospace,monospace }
+    .toolbar { display:flex; gap:10px; margin:14px 0; flex-wrap:wrap }
+    button,input { background:#102033; color:#eaf5ff; border:1px solid var(--line); border-radius:9px; padding:10px 12px }
+    input { flex:1; min-width:170px }
+    button { cursor:pointer } button:hover { border-color:var(--cyan) }
+    .table-wrap { overflow:auto; max-height:65vh; border:1px solid var(--line); border-radius:14px }
+    table { width:100%; border-collapse:collapse; font-family:ui-monospace,monospace }
+    th,td { padding:10px 12px; border-bottom:1px solid #1b334d; text-align:left; white-space:nowrap }
+    th { position:sticky; top:0; background:#102033; color:var(--cyan) }
+    tr:hover { background:#132b43 }
+    @media(max-width:650px) { .grid { grid-template-columns:1fr } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div><div class="label">Real-time monitor</div><h1>ESP32 <span>CAN Gateway</span></h1></div>
+    <div id="status" class="status">Connecting…</div>
+  </header>
+  <section class="grid">
+    <div class="card"><span class="label">Frames</span><span id="count" class="value">0</span></div>
+    <div class="card"><span class="label">Frames / second</span><span id="rate" class="value">0</span></div>
+    <div class="card"><span class="label">Last CAN ID</span><span id="lastId" class="value">—</span></div>
+  </section>
+  <div class="toolbar">
+    <input id="filter" placeholder="Filter CAN ID, e.g. 18DAF110">
+    <button id="pause">Pause</button>
+    <button id="clear">Clear</button>
+    <button id="export">Export CSV</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Time</th><th>CAN ID</th><th>Type</th><th>DLC</th><th>Data (hex)</th></tr></thead>
+      <tbody id="frames"></tbody>
+    </table>
+  </div>
+</main>
+<script>
+  const state={frames:[],count:0,second:0,paused:false};
+  const $=id=>document.getElementById(id);
+  function connect(){
+    const ws=new WebSocket(`ws://${location.host}/ws`);
+    ws.onopen=()=>{$("status").textContent="Live";$("status").className="status online"};
+    ws.onclose=()=>{$("status").textContent="Reconnecting…";$("status").className="status";setTimeout(connect,1500)};
+    ws.onmessage=e=>{
+      if(state.paused)return;
+      try{
+        const f=JSON.parse(e.data); state.count++;state.second++;state.frames.unshift(f);
+        if(state.frames.length>1000)state.frames.length=1000;
+        $("count").textContent=state.count.toLocaleString();$("lastId").textContent=f.id_hex;
+        renderFrame(f);
+      }catch(err){console.error(err)}
+    };
+  }
+  function renderFrame(f){
+    const query=$("filter").value.trim().toUpperCase();
+    if(query&&!f.id_hex.toUpperCase().includes(query))return;
+    const row=$("frames").insertRow(0);
+    row.innerHTML=`<td>${(f.timestamp_us/1e6).toFixed(3)} s</td><td>${f.id_hex}</td><td>${f.extended?"Extended":"Standard"}${f.remote?" RTR":""}</td><td>${f.dlc}</td><td>${f.data.map(x=>x.toString(16).padStart(2,"0")).join(" ").toUpperCase()}</td>`;
+    while($("frames").rows.length>300)$("frames").deleteRow(300);
+  }
+  setInterval(()=>{$("rate").textContent=state.second;state.second=0},1000);
+  $("pause").onclick=()=>{state.paused=!state.paused;$("pause").textContent=state.paused?"Resume":"Pause"};
+  $("clear").onclick=()=>{$("frames").innerHTML="";state.frames=[];state.count=0;$("count").textContent="0"};
+  $("filter").oninput=()=>{$("frames").innerHTML="";state.frames.slice().reverse().forEach(renderFrame)};
+  $("export").onclick=()=>{
+    const rows=["timestamp_us,id,extended,remote,dlc,data",...state.frames.map(f=>`${f.timestamp_us},${f.id_hex},${f.extended},${f.remote},${f.dlc},"${f.data.map(x=>x.toString(16).padStart(2,"0")).join(" ")}"`)];
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));a.download="can-frames.csv";a.click();URL.revokeObjectURL(a.href);
+  };
+  connect();
+</script>
+</body>
+</html>

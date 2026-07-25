@@ -1,0 +1,22 @@
+name: ESP-IDF build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [esp32, esp32s3, esp32c3]
+    container: espressif/idf:release-v5.4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ${{ matrix.target }}
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          idf.py set-target "${{ matrix.target }}"
+          idf.py build

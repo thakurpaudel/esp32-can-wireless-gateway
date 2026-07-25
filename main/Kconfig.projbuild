@@ -1,0 +1,47 @@
+menu "CAN Wireless Gateway"
+
+    config CAN_TX_GPIO
+        int "TWAI TX GPIO"
+        default 5
+        range 0 48
+
+    config CAN_RX_GPIO
+        int "TWAI RX GPIO"
+        default 4
+        range 0 48
+
+    choice CAN_BITRATE
+        prompt "CAN bitrate"
+        default CAN_BITRATE_500K
+        config CAN_BITRATE_125K
+            bool "125 kbit/s"
+        config CAN_BITRATE_250K
+            bool "250 kbit/s"
+        config CAN_BITRATE_500K
+            bool "500 kbit/s"
+        config CAN_BITRATE_1M
+            bool "1 Mbit/s"
+    endchoice
+
+    config GATEWAY_WIFI_SSID
+        string "Wi-Fi SSID"
+        default ""
+
+    config GATEWAY_WIFI_PASSWORD
+        string "Wi-Fi password"
+        default ""
+
+    config GATEWAY_HOSTNAME
+        string "mDNS hostname"
+        default "esp32-can"
+
+    config GATEWAY_AP_FALLBACK
+        bool "Start fallback access point if station connection fails"
+        default y
+
+    config GATEWAY_AP_PASSWORD
+        string "Fallback access-point password"
+        default "can-gateway"
+        depends on GATEWAY_AP_FALLBACK
+
+endmenu
