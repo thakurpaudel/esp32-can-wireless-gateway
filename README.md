@@ -12,6 +12,7 @@ and a Python desktop monitor for computers on the same network.
 - Wi-Fi station mode with IP address logging and `esp32-can.local` mDNS
 - Fallback access point at `http://192.168.4.1`
 - Embedded real-time WebSocket dashboard with filtering and CSV export
+- Runtime CAN bitrate selection from the browser dashboard
 - BLE GATT notification stream using the same JSON format
 - Python/Tk desktop monitor with CSV export
 - Standard and extended 11/29-bit CAN IDs and RTR metadata
@@ -97,6 +98,10 @@ Dashboard: http://192.168.1.42 or http://esp32-can.local
 Open either address from a device connected to the same Wi-Fi network. If the
 configured network is unavailable, join the `esp32-can-setup` access point and
 open `http://192.168.4.1`.
+
+Use the dashboard's **CAN bitrate** selector to switch between 125, 250, 500,
+and 1000 kbit/s while the firmware is running. The TWAI driver restarts safely
+with the selected timing; no reflashing is required.
 
 ## Run the Python desktop monitor
 

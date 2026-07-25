@@ -1,7 +1,10 @@
 #include "web_server.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
+#include "can_gateway.h"
 #include "esp_check.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
@@ -38,6 +41,53 @@ static esp_err_t ws_handler(httpd_req_t *request) {
   return err;
 }
 
+static esp_err_t status_handler(httpd_req_t *request) {
+  char response[64];
+  int length = snprintf(response, sizeof(response), "{\"bitrate\":%lu}",
+                        (unsigned long)can_gateway_get_bitrate());
+  httpd_resp_set_type(request, "application/json");
+  httpd_resp_set_hdr(request, "Cache-Control", "no-store");
+  return httpd_resp_send(request, response, length);
+}
+
+static esp_err_t bitrate_handler(httpd_req_t *request) {
+  if (request->content_len <= 0 || request->content_len >= 64) {
+    httpd_resp_send_err(request, HTTPD_400_BAD_REQUEST, "Invalid request");
+    return ESP_OK;
+  }
+
+  char payload[64];
+  int received = httpd_req_recv(request, payload, (size_t)request->content_len);
+  if (received <= 0) {
+    httpd_resp_send_err(request, HTTPD_400_BAD_REQUEST, "Missing request body");
+    return ESP_OK;
+  }
+  payload[received] = '\0';
+
+  char *value = strstr(payload, "bitrate");
+  value = value ? strchr(value, ':') : NULL;
+  if (!value) {
+    httpd_resp_send_err(request, HTTPD_400_BAD_REQUEST, "Missing bitrate");
+    return ESP_OK;
+  }
+
+  uint32_t bitrate = (uint32_t)strtoul(value + 1, NULL, 10);
+  esp_err_t err = can_gateway_set_bitrate(bitrate);
+  if (err != ESP_OK) {
+    httpd_resp_send_err(request, HTTPD_400_BAD_REQUEST,
+                        "Use 125000, 250000, 500000, or 1000000");
+    return ESP_OK;
+  }
+
+  char response[72];
+  int length = snprintf(response, sizeof(response),
+                        "{\"accepted\":true,\"requested_bitrate\":%lu}",
+                        (unsigned long)bitrate);
+  httpd_resp_set_status(request, "202 Accepted");
+  httpd_resp_set_type(request, "application/json");
+  return httpd_resp_send(request, response, length);
+}
+
 esp_err_t web_server_start(void) {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.max_open_sockets = 7;
@@ -56,8 +106,20 @@ esp_err_t web_server_start(void) {
       .handler = ws_handler,
       .is_websocket = true,
   };
+  httpd_uri_t status = {
+      .uri = "/api/status",
+      .method = HTTP_GET,
+      .handler = status_handler,
+  };
+  httpd_uri_t bitrate = {
+      .uri = "/api/bitrate",
+      .method = HTTP_POST,
+      .handler = bitrate_handler,
+  };
   ESP_ERROR_CHECK(httpd_register_uri_handler(server, &index));
   ESP_ERROR_CHECK(httpd_register_uri_handler(server, &ws));
+  ESP_ERROR_CHECK(httpd_register_uri_handler(server, &status));
+  ESP_ERROR_CHECK(httpd_register_uri_handler(server, &bitrate));
   return ESP_OK;
 }
 

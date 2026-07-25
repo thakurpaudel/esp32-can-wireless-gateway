@@ -19,7 +19,7 @@
     .label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.1em }
     .value { display:block; margin-top:8px; font:bold 27px ui-monospace,monospace }
     .toolbar { display:flex; gap:10px; margin:14px 0; flex-wrap:wrap }
-    button,input { background:#102033; color:#eaf5ff; border:1px solid var(--line); border-radius:9px; padding:10px 12px }
+    button,input,select { background:#102033; color:#eaf5ff; border:1px solid var(--line); border-radius:9px; padding:10px 12px }
     input { flex:1; min-width:170px }
     button { cursor:pointer } button:hover { border-color:var(--cyan) }
     .table-wrap { overflow:auto; max-height:65vh; border:1px solid var(--line); border-radius:14px }
@@ -42,6 +42,15 @@
     <div class="card"><span class="label">Last CAN ID</span><span id="lastId" class="value">—</span></div>
   </section>
   <div class="toolbar">
+    <label class="status">CAN bitrate
+      <select id="bitrate" aria-label="CAN bitrate">
+        <option value="125000">125 kbit/s</option>
+        <option value="250000">250 kbit/s</option>
+        <option value="500000">500 kbit/s</option>
+        <option value="1000000">1 Mbit/s</option>
+      </select>
+    </label>
+    <span id="bitrateStatus" class="status">Loading…</span>
     <input id="filter" placeholder="Filter CAN ID, e.g. 18DAF110">
     <button id="pause">Pause</button>
     <button id="clear">Clear</button>
@@ -71,6 +80,28 @@
       }catch(err){console.error(err)}
     };
   }
+  async function loadBitrate(){
+    try{
+      const response=await fetch("/api/status",{cache:"no-store"});
+      const data=await response.json();
+      if(data.bitrate){
+        $("bitrate").value=String(data.bitrate);
+        $("bitrateStatus").textContent=`Active: ${formatBitrate(data.bitrate)}`;
+      }
+    }catch(err){$("bitrateStatus").textContent="Status unavailable"}
+  }
+  function formatBitrate(value){return value===1000000?"1 Mbit/s":`${value/1000} kbit/s`}
+  $("bitrate").onchange=async event=>{
+    const bitrate=Number(event.target.value);
+    $("bitrate").disabled=true;$("bitrateStatus").textContent="Applying…";
+    try{
+      const response=await fetch("/api/bitrate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({bitrate})});
+      if(!response.ok)throw new Error(await response.text());
+      await new Promise(resolve=>setTimeout(resolve,250));
+      await loadBitrate();
+    }catch(err){$("bitrateStatus").textContent="Change failed";console.error(err)}
+    finally{$("bitrate").disabled=false}
+  };
   function renderFrame(f){
     const query=$("filter").value.trim().toUpperCase();
     if(query&&!f.id_hex.toUpperCase().includes(query))return;
@@ -86,7 +117,7 @@
     const rows=["timestamp_us,id,extended,remote,dlc,data",...state.frames.map(f=>`${f.timestamp_us},${f.id_hex},${f.extended},${f.remote},${f.dlc},"${f.data.map(x=>x.toString(16).padStart(2,"0")).join(" ")}"`)];
     const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));a.download="can-frames.csv";a.click();URL.revokeObjectURL(a.href);
   };
-  connect();
+  loadBitrate();connect();
 </script>
 </body>
 </html>
