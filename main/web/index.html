@@ -7,45 +7,56 @@
   <style>
     :root { color-scheme: dark; --bg:#07111f; --panel:#102033; --line:#25405e; --cyan:#35d5f4; --green:#68e0a0; --muted:#93a8bd; }
     * { box-sizing:border-box }
-    body { margin:0; background:linear-gradient(145deg,#07111f,#0b1b2e); color:#eaf5ff; font:15px system-ui,sans-serif; min-height:100vh }
-    main { width:100%; min-height:100vh; padding:24px clamp(18px,3vw,54px); margin:0 auto }
+    html,body { height:100%; overflow:hidden }
+    body { margin:0; background:linear-gradient(145deg,#07111f,#0b1b2e); color:#eaf5ff; font:14px system-ui,sans-serif }
+    main { width:100%; height:100vh; padding:12px clamp(14px,2vw,32px); margin:0 auto; display:flex; flex-direction:column; overflow:hidden }
     header { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap }
-    h1 { margin:0; font-size:clamp(24px,5vw,40px) }
+    h1 { margin:0; font-size:clamp(22px,3vw,34px); line-height:1 }
     h1 span { color:var(--cyan) }
     .status { padding:8px 13px; border:1px solid var(--line); border-radius:999px; color:var(--muted) }
     .status.online { color:var(--green); border-color:#287b56 }
-    .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:24px 0 }
-    .card { padding:18px; background:#102033cc; border:1px solid var(--line); border-radius:14px }
+    .header-side { display:flex; align-items:center; gap:12px }
+    .credit { color:var(--muted); font-size:12px }
+    .credit strong { color:var(--cyan) }
+    .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:10px 0 }
+    .card { padding:10px 14px; background:#102033cc; border:1px solid var(--line); border-radius:12px }
     .label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.1em }
-    .value { display:block; margin-top:8px; font:bold 27px ui-monospace,monospace }
-    .toolbar { display:flex; gap:10px; margin:14px 0; flex-wrap:wrap }
-    button,input,select { background:#102033; color:#eaf5ff; border:1px solid var(--line); border-radius:9px; padding:10px 12px }
+    .value { display:block; margin-top:4px; font:bold 21px ui-monospace,monospace }
+    .toolbar { display:flex; gap:8px; margin:8px 0; flex-wrap:wrap }
+    button,input,select { background:#102033; color:#eaf5ff; border:1px solid var(--line); border-radius:8px; padding:7px 10px }
     .toolbar input { flex:1; min-width:170px }
     button { cursor:pointer } button:hover { border-color:var(--cyan) }
-    .send-panel { margin:18px 0; padding:18px; background:#102033cc; border:1px solid var(--line); border-radius:14px }
-    .send-panel h2 { margin:0 0 14px; font-size:18px }
-    .send-grid { display:grid; grid-template-columns:minmax(150px,1fr) minmax(140px,.7fr) minmax(260px,2fr) auto; gap:10px; align-items:end }
+    .send-panel { margin:0; padding:10px 14px; background:#102033cc; border:1px solid var(--line); border-radius:12px }
+    .send-panel h2 { margin:0 0 8px; font-size:16px }
+    .send-grid { display:grid; grid-template-columns:minmax(120px,.8fr) minmax(130px,.7fr) minmax(220px,2fr) auto; gap:8px; align-items:end }
     .field { display:grid; gap:6px; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.07em }
     .field input,.field select { width:100%; text-transform:none }
-    .check { display:flex; gap:8px; align-items:center; margin-top:12px; color:var(--muted) }
+    .send-options { display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-top:8px }
+    .check { display:flex; gap:6px; align-items:center; color:var(--muted) }
     .check input { width:auto }
     .send-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap }
     .primary { background:#0d7891; border-color:#35d5f4; font-weight:700 }
-    .table-wrap { overflow:auto; max-height:52vh; border:1px solid var(--line); border-radius:14px }
+    .repeat { display:flex; gap:6px; align-items:center; color:var(--muted) }
+    .repeat input { width:82px }
+    .danger { border-color:#a94d55; color:#ffb6bc }
+    .table-wrap { flex:1; min-height:180px; overflow:auto; border:1px solid var(--line); border-radius:12px; overscroll-behavior:contain }
     table { width:100%; border-collapse:collapse; font-family:ui-monospace,monospace }
-    th,td { padding:10px 12px; border-bottom:1px solid #1b334d; text-align:left; white-space:nowrap }
-    th { position:sticky; top:0; background:#102033; color:var(--cyan) }
+    th,td { padding:8px 10px; border-bottom:1px solid #1b334d; text-align:left; white-space:nowrap }
+    th { position:sticky; top:0; z-index:2; background:#102033; color:var(--cyan) }
     tr:hover { background:#132b43 }
     .tx { color:#f8bf5b }
-    @media(max-width:900px) { .send-grid { grid-template-columns:1fr 1fr } }
-    @media(max-width:650px) { .grid,.send-grid { grid-template-columns:1fr } main{padding:18px 12px} }
+    @media(max-width:900px) { html,body{overflow:auto} main{height:auto;min-height:100vh;overflow:visible}.send-grid{grid-template-columns:1fr 1fr}.table-wrap{height:60vh;flex:none}.credit{display:none} }
+    @media(max-width:650px) { .grid,.send-grid{grid-template-columns:1fr}.header-side{width:100%;justify-content:space-between}main{padding:12px}.grid{grid-template-columns:repeat(3,1fr)}.card{padding:8px}.value{font-size:17px} }
   </style>
 </head>
 <body>
 <main>
   <header>
     <div><div class="label">Real-time monitor</div><h1>ESP32 <span>CAN Gateway</span></h1></div>
-    <div id="status" class="status">Connecting…</div>
+    <div class="header-side">
+      <div class="credit">Developed by <strong>Thakur Paudel</strong></div>
+      <div id="status" class="status">Connecting…</div>
+    </div>
   </header>
   <section class="grid">
     <div class="card"><span class="label">Frames</span><span id="count" class="value">0</span></div>
@@ -71,8 +82,12 @@
         <button id="sendFrame" class="primary">Send CAN frame</button>
       </div>
     </div>
-    <label class="check"><input id="txRemote" type="checkbox"> Remote transmission request (RTR)</label>
-    <div id="txStatus" class="status" style="display:inline-block;margin-top:12px">Ready</div>
+    <div class="send-options">
+      <label class="check"><input id="txRemote" type="checkbox"> Remote transmission request (RTR)</label>
+      <label class="repeat">Repeat every <input id="repeatInterval" type="number" value="100" min="20" max="60000"> ms</label>
+      <button id="continuous">Start continuous send</button>
+      <div id="txStatus" class="status">Ready</div>
+    </div>
   </section>
   <div class="toolbar">
     <label class="status">CAN bitrate
@@ -97,7 +112,7 @@
   </div>
 </main>
 <script>
-  const state={frames:[],count:0,second:0,paused:false};
+  const state={frames:[],count:0,second:0,paused:false,continuous:false,continuousTimer:null,continuousCount:0};
   const $=id=>document.getElementById(id);
   function connect(){
     const ws=new WebSocket(`ws://${location.host}/ws`);
@@ -136,7 +151,7 @@
     finally{$("bitrate").disabled=false}
   };
   $("txRemote").onchange=event=>{$("txData").disabled=event.target.checked};
-  $("sendFrame").onclick=async()=>{
+  function buildTxFrame(){
     const idText=$("txId").value.trim().replace(/^0x/i,"");
     const extended=$("txFormat").value==="extended";
     const maximum=extended?0x1FFFFFFF:0x7FF;
@@ -146,19 +161,57 @@
     const data=tokens.map(value=>/^[0-9a-fA-F]{1,2}$/.test(value)?parseInt(value,16):NaN);
     if(!Number.isInteger(id)||id>maximum){
       $("txStatus").textContent=`Invalid ${extended?"29":"11"}-bit CAN ID`;
-      return;
+      return null;
     }
     if(data.length>8||data.some(value=>!Number.isInteger(value))){
       $("txStatus").textContent="Enter up to 8 hexadecimal bytes";
-      return;
+      return null;
     }
-    $("sendFrame").disabled=true;$("txStatus").textContent="Queueing frame…";
+    return {id,extended,remote,data:remote?[]:data};
+  }
+  async function transmitFrame(showProgress=true){
+    const frame=buildTxFrame();
+    if(!frame)return false;
+    if(showProgress){$("sendFrame").disabled=true;$("txStatus").textContent="Queueing frame…"}
     try{
-      const response=await fetch("/api/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,extended,remote,data:remote?[]:data})});
+      const response=await fetch("/api/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(frame)});
       if(!response.ok)throw new Error(await response.text());
-      $("txStatus").textContent=`Queued: 0x${id.toString(16).toUpperCase()}`;
-    }catch(err){$("txStatus").textContent=`Send failed: ${err.message}`}
-    finally{$("sendFrame").disabled=false}
+      if(showProgress)$("txStatus").textContent=`Queued: 0x${frame.id.toString(16).toUpperCase()}`;
+      return true;
+    }catch(err){$("txStatus").textContent=`Send failed: ${err.message}`;return false}
+    finally{if(showProgress)$("sendFrame").disabled=false}
+  }
+  $("sendFrame").onclick=()=>transmitFrame(true);
+  function lockTransmitFields(locked){
+    ["txId","txFormat","txData","txRemote","repeatInterval","sendFrame"].forEach(id=>$(id).disabled=locked);
+  }
+  function stopContinuous(message="Continuous send stopped"){
+    state.continuous=false;
+    clearTimeout(state.continuousTimer);
+    $("continuous").textContent="Start continuous send";
+    $("continuous").classList.remove("danger");
+    lockTransmitFields(false);
+    $("txData").disabled=$("txRemote").checked;
+    $("txStatus").textContent=message;
+  }
+  async function continuousTick(){
+    if(!state.continuous)return;
+    const success=await transmitFrame(false);
+    if(!success){stopContinuous("Continuous send stopped after error");return}
+    state.continuousCount++;
+    $("txStatus").textContent=`Continuous: ${state.continuousCount} frame${state.continuousCount===1?"":"s"} queued`;
+    const interval=Math.max(20,Math.min(60000,Number($("repeatInterval").value)||100));
+    state.continuousTimer=setTimeout(continuousTick,interval);
+  }
+  $("continuous").onclick=()=>{
+    if(state.continuous){stopContinuous();return}
+    const interval=Number($("repeatInterval").value);
+    if(!Number.isFinite(interval)||interval<20||interval>60000){$("txStatus").textContent="Interval must be 20–60000 ms";return}
+    if(!buildTxFrame())return;
+    state.continuous=true;state.continuousCount=0;
+    lockTransmitFields(true);
+    $("continuous").textContent="Stop continuous send";$("continuous").classList.add("danger");
+    continuousTick();
   };
   function renderFrame(f){
     const query=$("filter").value.trim().toUpperCase();
@@ -166,7 +219,7 @@
     const row=$("frames").insertRow(0);
     const direction=f.direction||"rx";
     row.innerHTML=`<td>${(f.timestamp_us/1e6).toFixed(3)} s</td><td class="${direction==="tx"?"tx":""}">${direction.toUpperCase()}</td><td>${f.id_hex}</td><td>${f.extended?"Extended":"Standard"}${f.remote?" RTR":""}</td><td>${f.dlc}</td><td>${f.data.map(x=>x.toString(16).padStart(2,"0")).join(" ").toUpperCase()}</td>`;
-    while($("frames").rows.length>300)$("frames").deleteRow(300);
+    while($("frames").rows.length>600)$("frames").deleteRow(600);
   }
   setInterval(()=>{$("rate").textContent=state.second;state.second=0},1000);
   $("pause").onclick=()=>{state.paused=!state.paused;$("pause").textContent=state.paused?"Resume":"Pause"};

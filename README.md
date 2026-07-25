@@ -110,6 +110,12 @@ enter a dedicated FreeRTOS queue and are processed by the task that owns the
 TWAI driver. Successfully queued TX frames appear in the monitor with `TX`;
 received bus frames appear with `RX`.
 
+For periodic traffic, set a repeat interval from 20 to 60000 milliseconds and
+select **Start continuous send**. The dashboard waits for each HTTP request to
+complete before scheduling the next one, preventing overlapping requests.
+Select **Stop continuous send** before changing the frame. The compact controls
+remain fixed while only the large CAN frame table scrolls on desktop screens.
+
 ## Run the Python BLE desktop monitor
 
 ```bash
