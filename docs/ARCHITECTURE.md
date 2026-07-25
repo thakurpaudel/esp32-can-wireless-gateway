@@ -2,7 +2,7 @@
 
 ```text
 CAN bus
-   │
+   │ RX / TX
 CAN transceiver (required)
    │ RX/TX
 ESP32 TWAI driver → normalized gateway_frame_t
@@ -10,12 +10,13 @@ ESP32 TWAI driver → normalized gateway_frame_t
                            └─ NimBLE GATT notify → BLE client
 
 PC desktop monitor ── WebSocket ── Wi-Fi LAN ── ESP32
+Browser TX panel ── HTTP API ── TX queue ── TWAI driver ── CAN bus
 ```
 
 ## Design boundaries
 
 - `can_gateway` owns the TWAI peripheral and converts driver messages into a
-  transport-neutral frame.
+  transport-neutral frame. It also owns the queued transmit path.
 - `web_server` serves the embedded dashboard and broadcasts JSON frames to all
   WebSocket clients.
 - `ble_gateway` exposes the same JSON frame through a notify characteristic.

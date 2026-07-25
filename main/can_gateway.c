@@ -15,17 +15,20 @@
 
 static const char *TAG = "can";
 static QueueHandle_t bitrate_queue;
+static QueueHandle_t transmit_queue;
 static uint32_t active_bitrate;
 
 size_t gateway_frame_to_json(const gateway_frame_t *frame, char *buffer,
                              size_t size) {
   int used = snprintf(buffer, size,
                       "{\"timestamp_us\":%lld,\"id\":%lu,\"id_hex\":\"%s%lX\","
-                      "\"extended\":%s,\"remote\":%s,\"dlc\":%u,\"data\":[",
+                      "\"extended\":%s,\"remote\":%s,\"direction\":\"%s\","
+                      "\"dlc\":%u,\"data\":[",
                       (long long)frame->timestamp_us, (unsigned long)frame->id,
                       frame->extended ? "0x" : "0x", (unsigned long)frame->id,
                       frame->extended ? "true" : "false",
-                      frame->remote ? "true" : "false", frame->dlc);
+                      frame->remote ? "true" : "false",
+                      frame->transmitted ? "tx" : "rx", frame->dlc);
   if (used < 0 || (size_t)used >= size) {
     return 0;
   }
@@ -114,13 +117,43 @@ static void apply_requested_bitrate(void) {
   }
 }
 
+static void transmit_requested_frames(void) {
+  gateway_frame_t frame;
+  while (xQueueReceive(transmit_queue, &frame, 0) == pdTRUE) {
+    twai_message_t message = {
+        .identifier = frame.id,
+        .data_length_code = frame.dlc,
+        .extd = frame.extended,
+        .rtr = frame.remote,
+    };
+    for (uint8_t i = 0; i < frame.dlc; ++i) {
+      message.data[i] = frame.data[i];
+    }
+
+    esp_err_t err = twai_transmit(&message, pdMS_TO_TICKS(100));
+    if (err != ESP_OK) {
+      ESP_LOGW(TAG, "Transmit 0x%lX failed: %s", (unsigned long)frame.id,
+               esp_err_to_name(err));
+      continue;
+    }
+
+    frame.timestamp_us = esp_timer_get_time();
+    frame.transmitted = true;
+    web_server_publish(&frame);
+    ble_gateway_publish(&frame);
+    ESP_LOGI(TAG, "Transmitted CAN ID 0x%lX DLC=%u", (unsigned long)frame.id,
+             frame.dlc);
+  }
+}
+
 static void receive_task(void *arg) {
   (void)arg;
   twai_message_t message;
 
   while (true) {
     apply_requested_bitrate();
-    esp_err_t err = twai_receive(&message, pdMS_TO_TICKS(100));
+    transmit_requested_frames();
+    esp_err_t err = twai_receive(&message, pdMS_TO_TICKS(20));
     if (err == ESP_ERR_TIMEOUT) {
       continue;
     }
@@ -134,6 +167,7 @@ static void receive_task(void *arg) {
         .dlc = message.data_length_code > 8 ? 8 : message.data_length_code,
         .extended = message.extd,
         .remote = message.rtr,
+        .transmitted = false,
         .timestamp_us = esp_timer_get_time(),
     };
     for (uint8_t i = 0; i < frame.dlc; ++i) {
@@ -147,7 +181,8 @@ static void receive_task(void *arg) {
 
 esp_err_t can_gateway_start(void) {
   bitrate_queue = xQueueCreate(1, sizeof(uint32_t));
-  if (!bitrate_queue) {
+  transmit_queue = xQueueCreate(16, sizeof(gateway_frame_t));
+  if (!bitrate_queue || !transmit_queue) {
     return ESP_ERR_NO_MEM;
   }
   ESP_RETURN_ON_ERROR(install_driver(configured_bitrate()), TAG,
@@ -176,3 +211,15 @@ esp_err_t can_gateway_set_bitrate(uint32_t bitrate) {
 }
 
 uint32_t can_gateway_get_bitrate(void) { return active_bitrate; }
+
+esp_err_t can_gateway_send(const gateway_frame_t *frame) {
+  if (!frame || frame->dlc > 8 ||
+      (frame->extended ? frame->id > 0x1FFFFFFF : frame->id > 0x7FF)) {
+    return ESP_ERR_INVALID_ARG;
+  }
+  if (!transmit_queue) {
+    return ESP_ERR_INVALID_STATE;
+  }
+  return xQueueSend(transmit_queue, frame, 0) == pdTRUE ? ESP_OK
+                                                        : ESP_ERR_NO_MEM;
+}

@@ -8,7 +8,7 @@
     :root { color-scheme: dark; --bg:#07111f; --panel:#102033; --line:#25405e; --cyan:#35d5f4; --green:#68e0a0; --muted:#93a8bd; }
     * { box-sizing:border-box }
     body { margin:0; background:linear-gradient(145deg,#07111f,#0b1b2e); color:#eaf5ff; font:15px system-ui,sans-serif; min-height:100vh }
-    main { width:min(1120px,94vw); margin:32px auto }
+    main { width:100%; min-height:100vh; padding:24px clamp(18px,3vw,54px); margin:0 auto }
     header { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap }
     h1 { margin:0; font-size:clamp(24px,5vw,40px) }
     h1 span { color:var(--cyan) }
@@ -20,14 +20,25 @@
     .value { display:block; margin-top:8px; font:bold 27px ui-monospace,monospace }
     .toolbar { display:flex; gap:10px; margin:14px 0; flex-wrap:wrap }
     button,input,select { background:#102033; color:#eaf5ff; border:1px solid var(--line); border-radius:9px; padding:10px 12px }
-    input { flex:1; min-width:170px }
+    .toolbar input { flex:1; min-width:170px }
     button { cursor:pointer } button:hover { border-color:var(--cyan) }
-    .table-wrap { overflow:auto; max-height:65vh; border:1px solid var(--line); border-radius:14px }
+    .send-panel { margin:18px 0; padding:18px; background:#102033cc; border:1px solid var(--line); border-radius:14px }
+    .send-panel h2 { margin:0 0 14px; font-size:18px }
+    .send-grid { display:grid; grid-template-columns:minmax(150px,1fr) minmax(140px,.7fr) minmax(260px,2fr) auto; gap:10px; align-items:end }
+    .field { display:grid; gap:6px; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.07em }
+    .field input,.field select { width:100%; text-transform:none }
+    .check { display:flex; gap:8px; align-items:center; margin-top:12px; color:var(--muted) }
+    .check input { width:auto }
+    .send-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap }
+    .primary { background:#0d7891; border-color:#35d5f4; font-weight:700 }
+    .table-wrap { overflow:auto; max-height:52vh; border:1px solid var(--line); border-radius:14px }
     table { width:100%; border-collapse:collapse; font-family:ui-monospace,monospace }
     th,td { padding:10px 12px; border-bottom:1px solid #1b334d; text-align:left; white-space:nowrap }
     th { position:sticky; top:0; background:#102033; color:var(--cyan) }
     tr:hover { background:#132b43 }
-    @media(max-width:650px) { .grid { grid-template-columns:1fr } }
+    .tx { color:#f8bf5b }
+    @media(max-width:900px) { .send-grid { grid-template-columns:1fr 1fr } }
+    @media(max-width:650px) { .grid,.send-grid { grid-template-columns:1fr } main{padding:18px 12px} }
   </style>
 </head>
 <body>
@@ -40,6 +51,28 @@
     <div class="card"><span class="label">Frames</span><span id="count" class="value">0</span></div>
     <div class="card"><span class="label">Frames / second</span><span id="rate" class="value">0</span></div>
     <div class="card"><span class="label">Last CAN ID</span><span id="lastId" class="value">—</span></div>
+  </section>
+  <section class="send-panel">
+    <h2>Transmit CAN frame</h2>
+    <div class="send-grid">
+      <label class="field">CAN ID (hex)
+        <input id="txId" value="123" maxlength="8" placeholder="123 or 18DAF110">
+      </label>
+      <label class="field">Frame format
+        <select id="txFormat">
+          <option value="standard">Standard (11-bit)</option>
+          <option value="extended">Extended (29-bit)</option>
+        </select>
+      </label>
+      <label class="field">Data bytes (hex, maximum 8)
+        <input id="txData" value="00 01 02 03" placeholder="01 02 A0 FF">
+      </label>
+      <div class="send-actions">
+        <button id="sendFrame" class="primary">Send CAN frame</button>
+      </div>
+    </div>
+    <label class="check"><input id="txRemote" type="checkbox"> Remote transmission request (RTR)</label>
+    <div id="txStatus" class="status" style="display:inline-block;margin-top:12px">Ready</div>
   </section>
   <div class="toolbar">
     <label class="status">CAN bitrate
@@ -58,7 +91,7 @@
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Time</th><th>CAN ID</th><th>Type</th><th>DLC</th><th>Data (hex)</th></tr></thead>
+      <thead><tr><th>Time</th><th>Direction</th><th>CAN ID</th><th>Type</th><th>DLC</th><th>Data (hex)</th></tr></thead>
       <tbody id="frames"></tbody>
     </table>
   </div>
@@ -102,11 +135,37 @@
     }catch(err){$("bitrateStatus").textContent="Change failed";console.error(err)}
     finally{$("bitrate").disabled=false}
   };
+  $("txRemote").onchange=event=>{$("txData").disabled=event.target.checked};
+  $("sendFrame").onclick=async()=>{
+    const idText=$("txId").value.trim().replace(/^0x/i,"");
+    const extended=$("txFormat").value==="extended";
+    const maximum=extended?0x1FFFFFFF:0x7FF;
+    const id=/^[0-9a-fA-F]+$/.test(idText)?parseInt(idText,16):NaN;
+    const remote=$("txRemote").checked;
+    const tokens=$("txData").value.trim()?$("txData").value.trim().split(/[\s,]+/):[];
+    const data=tokens.map(value=>/^[0-9a-fA-F]{1,2}$/.test(value)?parseInt(value,16):NaN);
+    if(!Number.isInteger(id)||id>maximum){
+      $("txStatus").textContent=`Invalid ${extended?"29":"11"}-bit CAN ID`;
+      return;
+    }
+    if(data.length>8||data.some(value=>!Number.isInteger(value))){
+      $("txStatus").textContent="Enter up to 8 hexadecimal bytes";
+      return;
+    }
+    $("sendFrame").disabled=true;$("txStatus").textContent="Queueing frame…";
+    try{
+      const response=await fetch("/api/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,extended,remote,data:remote?[]:data})});
+      if(!response.ok)throw new Error(await response.text());
+      $("txStatus").textContent=`Queued: 0x${id.toString(16).toUpperCase()}`;
+    }catch(err){$("txStatus").textContent=`Send failed: ${err.message}`}
+    finally{$("sendFrame").disabled=false}
+  };
   function renderFrame(f){
     const query=$("filter").value.trim().toUpperCase();
     if(query&&!f.id_hex.toUpperCase().includes(query))return;
     const row=$("frames").insertRow(0);
-    row.innerHTML=`<td>${(f.timestamp_us/1e6).toFixed(3)} s</td><td>${f.id_hex}</td><td>${f.extended?"Extended":"Standard"}${f.remote?" RTR":""}</td><td>${f.dlc}</td><td>${f.data.map(x=>x.toString(16).padStart(2,"0")).join(" ").toUpperCase()}</td>`;
+    const direction=f.direction||"rx";
+    row.innerHTML=`<td>${(f.timestamp_us/1e6).toFixed(3)} s</td><td class="${direction==="tx"?"tx":""}">${direction.toUpperCase()}</td><td>${f.id_hex}</td><td>${f.extended?"Extended":"Standard"}${f.remote?" RTR":""}</td><td>${f.dlc}</td><td>${f.data.map(x=>x.toString(16).padStart(2,"0")).join(" ").toUpperCase()}</td>`;
     while($("frames").rows.length>300)$("frames").deleteRow(300);
   }
   setInterval(()=>{$("rate").textContent=state.second;state.second=0},1000);
@@ -114,7 +173,7 @@
   $("clear").onclick=()=>{$("frames").innerHTML="";state.frames=[];state.count=0;$("count").textContent="0"};
   $("filter").oninput=()=>{$("frames").innerHTML="";state.frames.slice().reverse().forEach(renderFrame)};
   $("export").onclick=()=>{
-    const rows=["timestamp_us,id,extended,remote,dlc,data",...state.frames.map(f=>`${f.timestamp_us},${f.id_hex},${f.extended},${f.remote},${f.dlc},"${f.data.map(x=>x.toString(16).padStart(2,"0")).join(" ")}"`)];
+    const rows=["timestamp_us,direction,id,extended,remote,dlc,data",...state.frames.map(f=>`${f.timestamp_us},${f.direction||"rx"},${f.id_hex},${f.extended},${f.remote},${f.dlc},"${f.data.map(x=>x.toString(16).padStart(2,"0")).join(" ")}"`)];
     const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));a.download="can-frames.csv";a.click();URL.revokeObjectURL(a.href);
   };
   loadBitrate();connect();

@@ -13,6 +13,7 @@ and a Python desktop monitor for computers on the same network.
 - Fallback access point at `http://192.168.4.1`
 - Embedded real-time WebSocket dashboard with filtering and CSV export
 - Runtime CAN bitrate selection from the browser dashboard
+- Queued CAN transmission for standard, extended, data, and RTR frames
 - BLE GATT notification stream using the same JSON format
 - Python/Tk desktop monitor with CSV export
 - Standard and extended 11/29-bit CAN IDs and RTR metadata
@@ -103,6 +104,12 @@ Use the dashboard's **CAN bitrate** selector to switch between 125, 250, 500,
 and 1000 kbit/s while the firmware is running. The TWAI driver restarts safely
 with the selected timing; no reflashing is required.
 
+The full-width **Transmit CAN frame** panel accepts an 11-bit or 29-bit CAN ID,
+up to eight hexadecimal data bytes, and optional RTR mode. Transmit requests
+enter a dedicated FreeRTOS queue and are processed by the task that owns the
+TWAI driver. Successfully queued TX frames appear in the monitor with `TX`;
+received bus frames appear with `RX`.
+
 ## Run the Python desktop monitor
 
 ```bash
@@ -131,6 +138,11 @@ This reference gateway is intended for monitoring and development. Validate bus
 loading, error handling, electrical isolation, security, and real-time behavior
 before using it in a vehicle or safety-critical system. Wi-Fi and BLE delivery
 are best-effort and must not be part of a safety control loop.
+
+The HTTP interface has no authentication. Any device that can reach the ESP32
+on the local network can request a CAN transmission. Use it only on a trusted,
+isolated development network and never expose the gateway directly to the
+internet.
 
 ## License
 

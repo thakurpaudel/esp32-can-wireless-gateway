@@ -10,6 +10,7 @@ typedef struct {
   uint8_t data[8];
   bool extended;
   bool remote;
+  bool transmitted;
   int64_t timestamp_us;
 } gateway_frame_t;
 
