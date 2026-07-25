@@ -9,7 +9,7 @@ ESP32 TWAI driver → normalized gateway_frame_t
                            ├─ HTTP WebSocket → browser dashboard
                            └─ NimBLE GATT notify → BLE client
 
-PC desktop monitor ── WebSocket ── Wi-Fi LAN ── ESP32
+PC desktop monitor ── BLE notify/write ── ESP32
 Browser TX panel ── HTTP API ── TX queue ── TWAI driver ── CAN bus
 ```
 
@@ -21,18 +21,39 @@ Browser TX panel ── HTTP API ── TX queue ── TWAI driver ── CAN b
   WebSocket clients.
 - `ble_gateway` exposes the same JSON frame through a notify characteristic.
 - `wifi_manager` owns station connection, fallback AP, IP logging, and mDNS.
-- `pc_app` is an independent Python consumer of the documented WebSocket format.
+- `pc_app` connects directly over BLE and supports monitoring, transmission,
+  bitrate changes, and CSV export without Wi-Fi.
 
 The transport-neutral frame keeps CAN acquisition independent of the user
 interfaces. Slow or disconnected clients do not block CAN reception.
 
-## Wire format
+## Wi-Fi wire format
 
-Both transports use one compact JSON object per frame:
+The WebSocket transport uses one compact JSON object per frame:
 
 ```json
-{"timestamp_us":1234567,"id":291,"id_hex":"0x123","extended":false,"remote":false,"dlc":8,"data":[1,2,3,4,5,6,7,8]}
+{"timestamp_us":1234567,"id":291,"id_hex":"0x123","extended":false,"remote":false,"direction":"rx","dlc":8,"data":[1,2,3,4,5,6,7,8]}
 ```
+
+## BLE wire format
+
+All multibyte integers are little-endian. Packets fit the default 20-byte GATT
+notification payload and do not depend on a larger negotiated MTU.
+
+Frame notifications are always 19 bytes:
+
+| Offset | Size | Meaning |
+|---|---:|---|
+| 0 | 1 | Opcode `0x81` |
+| 1 | 1 | Flags: bit 0 extended, bit 1 RTR, bit 2 transmitted |
+| 2 | 1 | DLC, 0–8 |
+| 3 | 4 | CAN ID |
+| 7 | 4 | Milliseconds since boot, wrapping at 32 bits |
+| 11 | 8 | Data, zero-padded |
+
+CAN transmit commands contain opcode `0x01`, flags, DLC, a four-byte CAN ID,
+and 0–8 data bytes. Bitrate commands contain opcode `0x02` followed by the
+four-byte bitrate in bit/s.
 
 ## Hardware
 

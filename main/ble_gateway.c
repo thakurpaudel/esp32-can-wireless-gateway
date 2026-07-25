@@ -4,11 +4,13 @@
 
 #include <string.h>
 
+#include "can_gateway.h"
 #include "esp_log.h"
 #include "host/ble_hs.h"
 #include "host/ble_uuid.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
+#include "os/os_mbuf.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
 
@@ -23,6 +25,9 @@ static const ble_uuid128_t service_uuid =
 static const ble_uuid128_t frame_uuid =
     BLE_UUID128_INIT(0x10, 0x9b, 0x4f, 0x20, 0xea, 0x3a, 0x45, 0xa2, 0xb2, 0x45,
                      0x0f, 0x24, 0x98, 0x11, 0x00, 0x02);
+static const ble_uuid128_t command_uuid =
+    BLE_UUID128_INIT(0x10, 0x9b, 0x4f, 0x20, 0xea, 0x3a, 0x45, 0xa2, 0xb2, 0x45,
+                     0x0f, 0x24, 0x98, 0x11, 0x00, 0x03);
 
 static int characteristic_access(uint16_t conn, uint16_t attr,
                                  struct ble_gatt_access_ctxt *context,
@@ -32,6 +37,54 @@ static int characteristic_access(uint16_t conn, uint16_t attr,
   (void)context;
   (void)arg;
   return 0;
+}
+
+static int command_access(uint16_t conn, uint16_t attr,
+                          struct ble_gatt_access_ctxt *context, void *arg) {
+  (void)conn;
+  (void)attr;
+  (void)arg;
+
+  uint16_t length = OS_MBUF_PKTLEN(context->om);
+  uint8_t packet[15];
+  if (length == 0 || length > sizeof(packet) ||
+      os_mbuf_copydata(context->om, 0, length, packet) != 0) {
+    return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+  }
+
+  if (packet[0] == 0x01) {
+    if (length < 7) {
+      return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+    }
+    uint8_t dlc = packet[2];
+    bool remote = (packet[1] & 0x02) != 0;
+    if (dlc > 8 || length != (uint16_t)(7 + (remote ? 0 : dlc))) {
+      return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+    }
+
+    gateway_frame_t frame = {
+        .id = (uint32_t)packet[3] | ((uint32_t)packet[4] << 8) |
+              ((uint32_t)packet[5] << 16) | ((uint32_t)packet[6] << 24),
+        .dlc = remote ? 0 : dlc,
+        .extended = (packet[1] & 0x01) != 0,
+        .remote = remote,
+        .transmitted = true,
+    };
+    if (!remote) {
+      memcpy(frame.data, packet + 7, dlc);
+    }
+    return can_gateway_send(&frame) == ESP_OK ? 0 : BLE_ATT_ERR_UNLIKELY;
+  }
+
+  if (packet[0] == 0x02 && length == 5) {
+    uint32_t bitrate = (uint32_t)packet[1] | ((uint32_t)packet[2] << 8) |
+                       ((uint32_t)packet[3] << 16) |
+                       ((uint32_t)packet[4] << 24);
+    return can_gateway_set_bitrate(bitrate) == ESP_OK ? 0
+                                                      : BLE_ATT_ERR_UNLIKELY;
+  }
+
+  return BLE_ATT_ERR_VALUE_NOT_ALLOWED;
 }
 
 static const struct ble_gatt_svc_def services[] = {
@@ -45,6 +98,11 @@ static const struct ble_gatt_svc_def services[] = {
                     .access_cb = characteristic_access,
                     .val_handle = &value_handle,
                     .flags = BLE_GATT_CHR_F_NOTIFY,
+                },
+                {
+                    .uuid = &command_uuid.u,
+                    .access_cb = command_access,
+                    .flags = BLE_GATT_CHR_F_WRITE,
                 },
                 {0},
             },
@@ -127,9 +185,23 @@ void ble_gateway_publish(const gateway_frame_t *frame) {
     return;
   }
 
-  char json[192];
-  size_t length = gateway_frame_to_json(frame, json, sizeof(json));
-  struct os_mbuf *payload = ble_hs_mbuf_from_flat(json, length);
+  uint32_t timestamp_ms = (uint32_t)(frame->timestamp_us / 1000);
+  uint8_t packet[19] = {
+      0x81,
+      (frame->extended ? 0x01 : 0) | (frame->remote ? 0x02 : 0) |
+          (frame->transmitted ? 0x04 : 0),
+      frame->dlc,
+      (uint8_t)frame->id,
+      (uint8_t)(frame->id >> 8),
+      (uint8_t)(frame->id >> 16),
+      (uint8_t)(frame->id >> 24),
+      (uint8_t)timestamp_ms,
+      (uint8_t)(timestamp_ms >> 8),
+      (uint8_t)(timestamp_ms >> 16),
+      (uint8_t)(timestamp_ms >> 24),
+  };
+  memcpy(packet + 11, frame->data, frame->dlc);
+  struct os_mbuf *payload = ble_hs_mbuf_from_flat(packet, sizeof(packet));
   if (payload) {
     ble_gatts_notify_custom(connection_handle, value_handle, payload);
   }

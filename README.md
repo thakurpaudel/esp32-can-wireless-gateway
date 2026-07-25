@@ -15,7 +15,7 @@ and a Python desktop monitor for computers on the same network.
 - Runtime CAN bitrate selection from the browser dashboard
 - Queued CAN transmission for standard, extended, data, and RTR frames
 - BLE GATT notification stream using the same JSON format
-- Python/Tk desktop monitor with CSV export
+- Full-screen Python/Tk BLE monitor and CAN transmitter with CSV export
 - Standard and extended 11/29-bit CAN IDs and RTR metadata
 
 > This project receives Classical CAN frames. It does not implement CAN FD,
@@ -110,27 +110,39 @@ enter a dedicated FreeRTOS queue and are processed by the task that owns the
 TWAI driver. Successfully queued TX frames appear in the monitor with `TX`;
 received bus frames appear with `RX`.
 
-## Run the Python desktop monitor
+## Run the Python BLE desktop monitor
 
 ```bash
 cd pc_app
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -r requirements.txt
-python3 can_monitor.py --host esp32-can.local
+python3 can_monitor.py --device ESP32-CAN
 ```
 
-You may replace `esp32-can.local` with the IP shown by the ESP32.
+The application scans for the ESP32 directly over Bluetooth Low Energy. It does
+not need Wi-Fi, an IP address, or the browser dashboard. On macOS, allow your
+terminal application to use Bluetooth when prompted. Press `Escape` to leave
+full-screen mode.
+
+If Homebrew Python reports that `_tkinter` is missing:
+
+```bash
+brew install python-tk@3.14
+```
 
 ## BLE interface
 
 - Device name: `ESP32-CAN`
 - Service UUID: `01001198-240f-45b2-a245-3aea204f9b10`
 - Frame characteristic UUID: `02001198-240f-45b2-a245-3aea204f9b10`
-- Characteristic property: notify
+- Command characteristic UUID: `03001198-240f-45b2-a245-3aea204f9b10`
+- Frame characteristic property: notify
+- Command characteristic property: write with response
 
-Subscribe to the frame characteristic to receive one JSON object per CAN frame.
-See [architecture and wire format](docs/ARCHITECTURE.md).
+Subscribe to the frame characteristic to receive compact 19-byte CAN packets.
+Write compact commands to transmit frames or change bitrate. See
+[architecture and BLE wire format](docs/ARCHITECTURE.md).
 
 ## Safety and performance
 
