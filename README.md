@@ -49,6 +49,7 @@ disabled. Check the selected chip's datasheet before assigning GPIOs.
 You need:
 
 - a supported ESP32 development board;
+- at least 4 MiB of flash;
 - a 3.3 V CAN transceiver, such as SN65HVD230;
 - a correctly terminated CAN bus and a common ground.
 
