@@ -21,13 +21,13 @@ static uint8_t own_address_type;
 
 static const ble_uuid128_t service_uuid =
     BLE_UUID128_INIT(0x10, 0x9b, 0x4f, 0x20, 0xea, 0x3a, 0x45, 0xa2, 0xb2, 0x45,
-                     0x0f, 0x24, 0x98, 0x11, 0x00, 0x01);
+                     0x0f, 0x24, 0x98, 0x11, 0x00, 0x11);
 static const ble_uuid128_t frame_uuid =
     BLE_UUID128_INIT(0x10, 0x9b, 0x4f, 0x20, 0xea, 0x3a, 0x45, 0xa2, 0xb2, 0x45,
-                     0x0f, 0x24, 0x98, 0x11, 0x00, 0x02);
+                     0x0f, 0x24, 0x98, 0x11, 0x00, 0x12);
 static const ble_uuid128_t command_uuid =
     BLE_UUID128_INIT(0x10, 0x9b, 0x4f, 0x20, 0xea, 0x3a, 0x45, 0xa2, 0xb2, 0x45,
-                     0x0f, 0x24, 0x98, 0x11, 0x00, 0x03);
+                     0x0f, 0x24, 0x98, 0x11, 0x00, 0x13);
 
 static int characteristic_access(uint16_t conn, uint16_t attr,
                                  struct ble_gatt_access_ctxt *context,
@@ -139,10 +139,16 @@ static int gap_event(struct ble_gap_event *event, void *arg) {
 static void advertise(void) {
   struct ble_hs_adv_fields fields = {0};
   fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
-  fields.name = (const uint8_t *)ble_svc_gap_device_name();
-  fields.name_len = strlen((const char *)fields.name);
-  fields.name_is_complete = 1;
+  fields.uuids128 = (ble_uuid128_t *)&service_uuid;
+  fields.num_uuids128 = 1;
+  fields.uuids128_is_complete = 1;
   ble_gap_adv_set_fields(&fields);
+
+  struct ble_hs_adv_fields response = {0};
+  response.name = (const uint8_t *)ble_svc_gap_device_name();
+  response.name_len = strlen((const char *)response.name);
+  response.name_is_complete = 1;
+  ble_gap_adv_rsp_set_fields(&response);
 
   struct ble_gap_adv_params params = {0};
   params.conn_mode = BLE_GAP_CONN_MODE_UND;

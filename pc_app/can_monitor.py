@@ -15,20 +15,18 @@ from tkinter import filedialog, messagebox, ttk
 
 from bleak import BleakClient, BleakScanner
 
-SERVICE_UUID = "01001198-240f-45b2-a245-3aea204f9b10"
-FRAME_UUID = "02001198-240f-45b2-a245-3aea204f9b10"
-COMMAND_UUID = "03001198-240f-45b2-a245-3aea204f9b10"
+SERVICE_UUID = "11001198-240f-45b2-a245-3aea204f9b10"
+FRAME_UUID = "12001198-240f-45b2-a245-3aea204f9b10"
+COMMAND_UUID = "13001198-240f-45b2-a245-3aea204f9b10"
 
 
 class GatewayMonitor:
     def __init__(self, root: tk.Tk, device_name: str) -> None:
         self.root = root
         self.root.title("ESP32 CAN BLE Gateway")
-        self.root.geometry("1200x760")
-        try:
-            self.root.attributes("-fullscreen", True)
-        except tk.TclError:
-            self.root.state("zoomed")
+        self.root.geometry("1100x700")
+        self.root.minsize(850, 520)
+        self.fullscreen = False
 
         self.device_name = tk.StringVar(value=device_name)
         self.status = tk.StringVar(value="Disconnected")
@@ -38,9 +36,10 @@ class GatewayMonitor:
         self.stop = threading.Event()
         self.loop: asyncio.AbstractEventLoop | None = None
         self.client: BleakClient | None = None
+        self.command_characteristic: object | None = None
 
         self._build_ui()
-        self.root.bind("<Escape>", self.toggle_fullscreen)
+        self.root.bind("<Escape>", self.leave_fullscreen)
         self.root.after(50, self.drain)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
@@ -55,9 +54,10 @@ class GatewayMonitor:
         ttk.Button(bar, text="Export CSV", command=self.export).pack(
             side=tk.RIGHT, padx=4
         )
-        ttk.Button(bar, text="Exit full screen", command=self.toggle_fullscreen).pack(
-            side=tk.RIGHT, padx=4
+        self.fullscreen_button = ttk.Button(
+            bar, text="Full screen", command=self.toggle_fullscreen
         )
+        self.fullscreen_button.pack(side=tk.RIGHT, padx=4)
         ttk.Label(self.root, textvariable=self.status, padding=(12, 0)).pack(
             anchor=tk.W
         )
@@ -125,8 +125,15 @@ class GatewayMonitor:
         scrollbar.place(relx=1.0, rely=0.25, relheight=0.72, anchor=tk.NE)
 
     def toggle_fullscreen(self, _event: object | None = None) -> None:
-        current = bool(self.root.attributes("-fullscreen"))
-        self.root.attributes("-fullscreen", not current)
+        self.fullscreen = not self.fullscreen
+        self.root.attributes("-fullscreen", self.fullscreen)
+        self.fullscreen_button.configure(
+            text="Exit full screen" if self.fullscreen else "Full screen"
+        )
+
+    def leave_fullscreen(self, _event: object | None = None) -> None:
+        if self.fullscreen:
+            self.toggle_fullscreen()
 
     def connect(self) -> None:
         if self.loop and self.loop.is_running():
@@ -157,7 +164,17 @@ class GatewayMonitor:
 
             async with BleakClient(device, disconnected_callback=self.disconnected) as client:
                 self.client = client
-                await client.start_notify(FRAME_UUID, self.notification)
+                frame_characteristic = client.services.get_characteristic(FRAME_UUID)
+                self.command_characteristic = client.services.get_characteristic(
+                    COMMAND_UUID
+                )
+                if not frame_characteristic or not self.command_characteristic:
+                    raise RuntimeError(
+                        "BLE protocol mismatch: required RX/TX characteristics "
+                        "were not found. Pull the latest code, rebuild, and reflash "
+                        "the ESP32 firmware."
+                    )
+                await client.start_notify(frame_characteristic, self.notification)
                 self.messages.put(
                     {"_status": f"Connected over BLE: {device.name or device.address}"}
                 )
@@ -167,6 +184,7 @@ class GatewayMonitor:
             self.messages.put({"_status": f"BLE error: {exc}"})
         finally:
             self.client = None
+            self.command_characteristic = None
 
     def disconnected(self, _client: BleakClient) -> None:
         self.messages.put({"_status": "BLE disconnected"})
@@ -221,11 +239,19 @@ class GatewayMonitor:
         self.submit_write(struct.pack("<BI", 0x02, bitrate), self.bitrate.get())
 
     def submit_write(self, packet: bytes, success: str) -> None:
-        if not self.loop or not self.client or not self.client.is_connected:
+        if (
+            not self.loop
+            or not self.client
+            or not self.client.is_connected
+            or not self.command_characteristic
+        ):
             self.tx_status.set("Connect to BLE first")
             return
         future = asyncio.run_coroutine_threadsafe(
-            self.client.write_gatt_char(COMMAND_UUID, packet, response=True), self.loop
+            self.client.write_gatt_char(
+                self.command_characteristic, packet, response=True
+            ),
+            self.loop,
         )
 
         def completed(result: object) -> None:

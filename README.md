@@ -128,8 +128,9 @@ python3 can_monitor.py --device ESP32-CAN
 
 The application scans for the ESP32 directly over Bluetooth Low Energy. It does
 not need Wi-Fi, an IP address, or the browser dashboard. On macOS, allow your
-terminal application to use Bluetooth when prompted. Press `Escape` to leave
-full-screen mode.
+terminal application to use Bluetooth when prompted. The application starts as
+a normal resizable window; select **Full screen** when needed and press `Escape`
+to return to windowed mode.
 
 If Homebrew Python reports that `_tkinter` is missing:
 
@@ -140,15 +141,20 @@ brew install python-tk@3.14
 ## BLE interface
 
 - Device name: `ESP32-CAN`
-- Service UUID: `01001198-240f-45b2-a245-3aea204f9b10`
-- Frame characteristic UUID: `02001198-240f-45b2-a245-3aea204f9b10`
-- Command characteristic UUID: `03001198-240f-45b2-a245-3aea204f9b10`
+- Service UUID: `11001198-240f-45b2-a245-3aea204f9b10`
+- Frame characteristic UUID: `12001198-240f-45b2-a245-3aea204f9b10`
+- Command characteristic UUID: `13001198-240f-45b2-a245-3aea204f9b10`
 - Frame characteristic property: notify
 - Command characteristic property: write with response
 
 Subscribe to the frame characteristic to receive compact 19-byte CAN packets.
 Write compact commands to transmit frames or change bitrate. See
 [architecture and BLE wire format](docs/ARCHITECTURE.md).
+
+The versioned service UUID prevents macOS CoreBluetooth from reusing an older
+cached GATT layout after new characteristics are added. If the application
+reports a protocol mismatch, update and reflash the ESP32 firmware before
+reconnecting.
 
 ## Safety and performance
 
