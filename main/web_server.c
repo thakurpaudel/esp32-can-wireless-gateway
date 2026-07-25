@@ -9,9 +9,8 @@
 static const char *TAG = "web";
 static httpd_handle_t server;
 
-extern const unsigned char
-    index_html_start[] asm("_binary_web_index_html_start");
-extern const unsigned char index_html_end[] asm("_binary_web_index_html_end");
+extern const unsigned char index_html_start[] asm("_binary_index_html_start");
+extern const unsigned char index_html_end[] asm("_binary_index_html_end");
 
 static esp_err_t index_handler(httpd_req_t *request) {
   httpd_resp_set_type(request, "text/html");
