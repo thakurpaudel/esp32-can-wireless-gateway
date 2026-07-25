@@ -16,6 +16,31 @@ static httpd_handle_t server;
 extern const unsigned char index_html_start[] asm("_binary_index_html_start");
 extern const unsigned char index_html_end[] asm("_binary_index_html_end");
 
+static void broadcast_text(char *text, size_t length) {
+  if (!server || !text || !length) {
+    return;
+  }
+
+  size_t count = 8;
+  int clients[8];
+  if (httpd_get_client_list(server, &count, clients) != ESP_OK) {
+    return;
+  }
+
+  httpd_ws_frame_t packet = {
+      .final = true,
+      .fragmented = false,
+      .type = HTTPD_WS_TYPE_TEXT,
+      .payload = (uint8_t *)text,
+      .len = length,
+  };
+  for (size_t i = 0; i < count; ++i) {
+    if (httpd_ws_get_fd_info(server, clients[i]) == HTTPD_WS_CLIENT_WEBSOCKET) {
+      httpd_ws_send_frame_async(server, clients[i], &packet);
+    }
+  }
+}
+
 static esp_err_t index_handler(httpd_req_t *request) {
   httpd_resp_set_type(request, "text/html");
   httpd_resp_set_hdr(request, "Cache-Control", "no-store");
@@ -219,23 +244,19 @@ void web_server_publish(const gateway_frame_t *frame) {
   if (!length) {
     return;
   }
+  broadcast_text(json, length);
+}
 
-  size_t count = 8;
-  int clients[8];
-  if (httpd_get_client_list(server, &count, clients) != ESP_OK) {
-    return;
-  }
-
-  httpd_ws_frame_t packet = {
-      .final = true,
-      .fragmented = false,
-      .type = HTTPD_WS_TYPE_TEXT,
-      .payload = (uint8_t *)json,
-      .len = length,
-  };
-  for (size_t i = 0; i < count; ++i) {
-    if (httpd_ws_get_fd_info(server, clients[i]) == HTTPD_WS_CLIENT_WEBSOCKET) {
-      httpd_ws_send_frame_async(server, clients[i], &packet);
-    }
+void web_server_publish_tx_status(uint32_t id, bool success,
+                                  const char *message) {
+  char json[192];
+  int length = snprintf(
+      json, sizeof(json),
+      "{\"event\":\"tx_status\",\"success\":%s,\"id_hex\":\"0x%lX\","
+      "\"message\":\"%s\"}",
+      success ? "true" : "false", (unsigned long)id,
+      message ? message : (success ? "CAN frame accepted" : "CAN send failed"));
+  if (length > 0 && (size_t)length < sizeof(json)) {
+    broadcast_text(json, (size_t)length);
   }
 }

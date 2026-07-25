@@ -116,6 +116,11 @@ complete before scheduling the next one, preventing overlapping requests.
 Select **Stop continuous send** before changing the frame. The compact controls
 remain fixed while only the large CAN frame table scrolls on desktop screens.
 
+The ESP32 reports TWAI transmit acceptance or failure back to the dashboard over
+WebSocket. Failed sends display a `Can't send` message and stop continuous
+transmission. A two-second HTTP heartbeat changes the badge from **Live** to
+**Disconnected** if the ESP32 or network connection is lost.
+
 ## Run the Python BLE desktop monitor
 
 ```bash

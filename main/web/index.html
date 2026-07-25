@@ -15,9 +15,11 @@
     h1 span { color:var(--cyan) }
     .status { padding:8px 13px; border:1px solid var(--line); border-radius:999px; color:var(--muted) }
     .status.online { color:var(--green); border-color:#287b56 }
+    .status.offline { color:#ff9ca5; border-color:#a94d55 }
     .header-side { display:flex; align-items:center; gap:12px }
     .credit { color:var(--muted); font-size:12px }
-    .credit strong { color:var(--cyan) }
+    .credit a { color:var(--cyan); font-weight:700; text-decoration:none }
+    .credit a:hover { text-decoration:underline }
     .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:10px 0 }
     .card { padding:10px 14px; background:#102033cc; border:1px solid var(--line); border-radius:12px }
     .label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.1em }
@@ -54,7 +56,7 @@
   <header>
     <div><div class="label">Real-time monitor</div><h1>ESP32 <span>CAN Gateway</span></h1></div>
     <div class="header-side">
-      <div class="credit">Developed by <strong>Thakur Paudel</strong></div>
+      <div class="credit">Developed by <a href="https://www.thakurpaudel.com.np/" target="_blank" rel="noopener noreferrer">Thakur Paudel</a></div>
       <div id="status" class="status">Connecting…</div>
     </div>
   </header>
@@ -112,21 +114,55 @@
   </div>
 </main>
 <script>
-  const state={frames:[],count:0,second:0,paused:false,continuous:false,continuousTimer:null,continuousCount:0};
+  const state={frames:[],count:0,second:0,paused:false,continuous:false,continuousTimer:null,continuousCount:0,ws:null};
   const $=id=>document.getElementById(id);
+  function connectionState(mode){
+    const labels={online:"Live",connecting:"Connecting…",offline:"Disconnected"};
+    $("status").textContent=labels[mode];
+    $("status").className=`status ${mode==="online"?"online":mode==="offline"?"offline":""}`;
+  }
   function connect(){
     const ws=new WebSocket(`ws://${location.host}/ws`);
-    ws.onopen=()=>{$("status").textContent="Live";$("status").className="status online"};
-    ws.onclose=()=>{$("status").textContent="Reconnecting…";$("status").className="status";setTimeout(connect,1500)};
+    state.ws=ws;connectionState("connecting");
+    ws.onopen=()=>connectionState("online");
+    ws.onerror=()=>connectionState("offline");
+    ws.onclose=()=>{
+      connectionState("offline");
+      if(state.continuous)stopContinuous("Disconnected — continuous send stopped");
+      setTimeout(connect,1500);
+    };
     ws.onmessage=e=>{
-      if(state.paused)return;
       try{
-        const f=JSON.parse(e.data); state.count++;state.second++;state.frames.unshift(f);
+        const f=JSON.parse(e.data);
+        if(f.event==="tx_status"){
+          if(f.success){
+            $("txStatus").textContent=`Sent ${f.id_hex}: ${f.message}`;
+          }else{
+            const message=`Can't send ${f.id_hex}: ${f.message}`;
+            if(state.continuous)stopContinuous(message);
+            else $("txStatus").textContent=message;
+          }
+          return;
+        }
+        if(state.paused)return;
+        state.count++;state.second++;state.frames.unshift(f);
         if(state.frames.length>1000)state.frames.length=1000;
         $("count").textContent=state.count.toLocaleString();$("lastId").textContent=f.id_hex;
         renderFrame(f);
       }catch(err){console.error(err)}
     };
+  }
+  async function heartbeat(){
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),1500);
+    try{
+      const response=await fetch(`/api/status?t=${Date.now()}`,{cache:"no-store",signal:controller.signal});
+      if(!response.ok||!state.ws||state.ws.readyState!==WebSocket.OPEN)throw new Error("offline");
+      connectionState("online");
+    }catch(err){
+      connectionState("offline");
+      if(state.continuous)stopContinuous("Disconnected — continuous send stopped");
+    }finally{clearTimeout(timeout)}
   }
   async function loadBitrate(){
     try{
@@ -198,6 +234,7 @@
     if(!state.continuous)return;
     const success=await transmitFrame(false);
     if(!success){stopContinuous("Continuous send stopped after error");return}
+    if(!state.continuous)return;
     state.continuousCount++;
     $("txStatus").textContent=`Continuous: ${state.continuousCount} frame${state.continuousCount===1?"":"s"} queued`;
     const interval=Math.max(20,Math.min(60000,Number($("repeatInterval").value)||100));
@@ -229,7 +266,7 @@
     const rows=["timestamp_us,direction,id,extended,remote,dlc,data",...state.frames.map(f=>`${f.timestamp_us},${f.direction||"rx"},${f.id_hex},${f.extended},${f.remote},${f.dlc},"${f.data.map(x=>x.toString(16).padStart(2,"0")).join(" ")}"`)];
     const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));a.download="can-frames.csv";a.click();URL.revokeObjectURL(a.href);
   };
-  loadBitrate();connect();
+  loadBitrate();connect();setInterval(heartbeat,2000);
 </script>
 </body>
 </html>

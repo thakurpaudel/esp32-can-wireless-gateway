@@ -134,9 +134,11 @@ static void transmit_requested_frames(void) {
     if (err != ESP_OK) {
       ESP_LOGW(TAG, "Transmit 0x%lX failed: %s", (unsigned long)frame.id,
                esp_err_to_name(err));
+      web_server_publish_tx_status(frame.id, false, esp_err_to_name(err));
       continue;
     }
 
+    web_server_publish_tx_status(frame.id, true, "CAN frame accepted by TWAI");
     frame.timestamp_us = esp_timer_get_time();
     frame.transmitted = true;
     web_server_publish(&frame);
